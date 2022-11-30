@@ -8,6 +8,7 @@ use CodeIgniter\HTTP\IncomingRequest;
 use CodeIgniter\HTTP\RequestInterface;
 use CodeIgniter\HTTP\ResponseInterface;
 use Psr\Log\LoggerInterface;
+use eftec\bladeone\BladeOne;
 
 /**
  * Class BaseController
@@ -48,6 +49,58 @@ abstract class BaseController extends Controller
         // Preload any models, libraries, etc, here.
 
         // E.g.: $this->session = \Config\Services::session();
+
+        $views = APPPATH . 'Views';
+        $cache = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'blade';
+        if (!file_exists($cache)) {
+            mkdir($cache, 0700);
+        }
+        if (ENVIRONMENT === 'production') {
+            $this->templateEngine = new BladeOne(
+                $views,
+                $cache,
+                BladeOne::MODE_AUTO
+            );
+        } else {
+            $this->templateEngine = new BladeOne(
+                $views,
+                $cache,
+                BladeOne::MODE_DEBUG
+            );
+        }
+
+        $this->templateEngine->pipeEnable = true;
+        $this->templateEngine->setBaseUrl(base_url());
+        
         service('eloquent');
+    }
+
+    /**
+     * This method render the template.
+     *
+     * @param string $filename - the filename of template.
+     * @param array $params - the data with context of the template.
+     * @return void
+     */
+    public function render(string $filename, array $params = [])
+    {
+        try {
+            // Render the template.
+            return $this->templateEngine->run($filename, $params);
+        } catch (\Throwable $e) {
+            if (ENVIRONMENT === 'production') {
+                // Save error in file log
+                log_message('error', $e->getTraceAsString());
+            } else {
+                // Show error in the current page
+                header_remove();
+                http_response_code(500);
+                header('HTTP/1.1 500 Internal Server Error');
+                echo '<pre>' . $e->getTraceAsString() . '</pre>';
+                echo PHP_EOL;
+                echo $e->getMessage();
+                exit;
+            }
+        }
     }
 }
